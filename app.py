@@ -9,7 +9,7 @@ PASSWORD = "123"            # كلمة السر للدخول
 EXPIRY_DATE = date(2026, 6, 1)  # تاريخ انتهاء النسخة التجريبية (سنة، شهر، يوم)
 
 # إعدادات الصفحة الاحترافية
-st.set_page_config(page_title="نظام Lister K للجداول الذكية", layout="wide", page_icon="🏫")
+st.set_page_config(page_title="SmarTimetable ⚡ | Lister K", layout="wide")
 
 # --- 2. دالة فحص تاريخ الصلاحية ---
 def is_expired():
@@ -52,7 +52,7 @@ elif check_password():
         st.session_state.authenticated = False
         st.rerun()
 
-    st.title("🏫 نظام تنظيم الجدول المدرسي الذكي")
+    st.title("SmarTimetable ⚡ | منظم المواعيد المدرسي الذكي")
     st.write("إدارة الحصص، منع التضارب، وتصدير الجداول - النسخة الاحترافية")
 
     # إعدادات الوقت والأيام
