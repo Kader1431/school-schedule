@@ -131,3 +131,64 @@ if check_license():
             with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
                 df_ex.to_excel(writer, index=False)
             st.download_button("📥 تحميل Excel", buf.getvalue(), "schedule.xlsx")
+            # --- دالة تلوين الخلايا (CSS) ---
+def get_subject_style(subject):
+    colors = {
+        "رياضيات": "#D6EAF8", # أزرق فاتح
+        "فيزياء": "#D5F5E3",   # أخضر فاتح
+        "علوم": "#FADBD8",     # وردي فاتح
+        "عربية": "#FCF3CF",    # أصفر فاتح
+        "فرنسية": "#E8DAEF",   # بنفسجي فاتح
+        "إنجليزية": "#FAE5D3"  # برتقالي فاتح
+    }
+    # إذا لم تكن المادة في القائمة، نستخدم لوناً رمادياً خفيفاً
+    return f'background-color: {colors.get(subject, "#F4F6F6")}'
+
+# --- تعديل دالة إنشاء الجدول لدعم الألوان ---
+def create_display_table(key, value, label_key):
+    df = pd.DataFrame(index=hours_list, columns=days).fillna("-")
+    for item in st.session_state.schedule:
+        if item[key] == value:
+            s_idx = hours_list.index(item['start'])
+            e_idx = hours_list.index(item['end'])
+            for i in range(s_idx, e_idx):
+                df.at[hours_list[i], item['day']] = f"{item['subject']} ({item[label_key]})"
+    
+    # تطبيق التلوين (Styler)
+    def apply_color(val):
+        if "(" in val:
+            subject_name = val.split(" (")[0]
+            return get_subject_style(subject_name)
+        return ""
+    
+    return df.style.applymap(apply_color)
+
+# --- إضافة تبويب "نظام الانتظار" ---
+t1, t2, t3, t4 = st.tabs(["📊 الأستاذ", "🏢 القسم", "🕵️ نظام الانتظار", "📥 الإدارة"])
+
+with t3:
+    st.subheader("🕵️ البحث عن أستاذ مستخلف (شاغر)")
+    col_day, col_hour = st.columns(2)
+    search_day = col_day.selectbox("اختر اليوم:", days, key="search_day")
+    search_hour = col_hour.selectbox("اختر الساعة:", hours_list, key="search_hour")
+    
+    if st.button("بحث عن الأساتذة الأحرار"):
+        all_teachers = set([i['teacher'] for i in st.session_state.schedule])
+        busy_teachers = set()
+        
+        for item in st.session_state.schedule:
+            if item['day'] == search_day:
+                s_idx = hours_list.index(item['start'])
+                e_idx = hours_list.index(item['end'])
+                curr_idx = hours_list.index(search_hour)
+                if s_idx <= curr_idx < e_idx:
+                    busy_teachers.add(item['teacher'])
+        
+        free_teachers = all_teachers - busy_teachers
+        
+        if free_teachers:
+            st.success(f"الأساتذة الأحرار يوم {search_day} على الساعة {search_hour}:")
+            for t in sorted(free_teachers):
+                st.write(f"✅ الأستاذ: **{t}**")
+        else:
+            st.warning("جميع الأساتذة لديهم حصص في هذا الوقت.")
