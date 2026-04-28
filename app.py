@@ -2,12 +2,18 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import io
+from datetime import date
 
 # --- 1. إعدادات الصفحة ---
 APP_NAME = "SmarTimetable PRO ⚡"
-st.set_page_config(page_title=APP_NAME, layout="wide", page_icon="⚡")
+st.set_page_config(
+    page_title=APP_NAME, 
+    layout="wide", 
+    page_icon="⚡",
+    initial_sidebar_state="expanded"
+)
 
-# --- 2. الاتصال بقاعدة بيانات جوجل ---
+# --- 2. الاتصال بقاعدة البيانات (الأكواد) ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def check_license():
@@ -16,25 +22,19 @@ def check_license():
 
     if not st.session_state.authenticated:
         st.title(f"🔐 تفعيل نظام {APP_NAME}")
-        st.info("يرجى إدخال كود التفعيل المكون من 14 حرفاً.")
+        st.info("يرجى إدخال كود التفعيل (صالح لهذه الجلسة فقط).")
         
         user_key = st.text_input("كود التفعيل", type="password", placeholder="XXXX-XXXX-XXXXXX").strip()
         
-        if st.button("دخول"):
+        if st.button("تفعيل الآن"):
             try:
-                # قراءة الجدول مع إلغاء التخزين المؤقت
                 df_keys = conn.read(ttl=0)
-                
-                # تنظيف أسماء الأعمدة (إزالة أي مسافات زائدة وتحويلها لحروف صغيرة)
                 df_keys.columns = [str(c).strip().lower() for c in df_keys.columns]
                 
-                # التأكد من وجود الأعمدة المطلوبة
                 if 'keys' in df_keys.columns and 'status' in df_keys.columns:
-                    # تنظيف البيانات داخل الأعمدة
                     df_keys['keys'] = df_keys['keys'].astype(str).str.strip()
                     df_keys['status'] = df_keys['status'].astype(str).str.strip().str.lower()
                     
-                    # تحويل لقاموس للبحث
                     valid_keys = dict(zip(df_keys['keys'], df_keys['status']))
                     
                     if user_key in valid_keys:
@@ -43,42 +43,49 @@ def check_license():
                             st.success("✅ تم التفعيل بنجاح!")
                             st.rerun()
                         else:
-                            st.error("❌ هذا الكود منتهي الصلاحية أو معطل.")
+                            st.error("❌ هذا الكود معطل أو منتهي.")
                     else:
-                        st.error("❌ كود التفعيل غير صحيح.")
+                        st.error("❌ كود خاطئ. يرجى مراجعة Lister K.")
                 else:
-                    st.error("⚠️ خطأ في تنسيق الجدول: تأكد أن العناوين هي keys و status.")
-            except Exception as e:
-                st.error("⚠️ فشل الاتصال بالجدول. تأكد من إعدادات Secrets وصلاحية المشاركة (Anyone with link).")
-        
-        st.caption("برمجة وتطوير Lister K © 2026")
+                    st.error("⚠️ خطأ في تنسيق جدول جوجل (keys/status).")
+            except:
+                st.error("⚠️ فشل الاتصال بالجدول. تأكد من إعدادات Secrets وصلاحية المشاركة.")
         return False
     return True
 
-# --- 3. البرنامج الرئيسي ---
+# --- 3. تشغيل البرنامج الرئيسي ---
 if check_license():
+    # تعريف القوائم الأساسية في نطاق عام لمنع أخطاء NameError
+    days = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
+    hours_list = [f"{h:02d}:00" for h in range(8, 18)]
+
     if 'schedule' not in st.session_state:
         st.session_state.schedule = []
 
+    # دالة الألوان للمواد
+    def get_subject_style(subject):
+        colors = {
+            "رياضيات": "#D6EAF8", "فيزياء": "#D5F5E3", "علوم": "#FADBD8",
+            "عربية": "#FCF3CF", "فرنسية": "#E8DAEF", "إنجليزية": "#FAE5D3"
+        }
+        return f'background-color: {colors.get(subject, "#F4F6F6")}; color: black; font-weight: bold;'
+
     st.title(f"⚡ {APP_NAME}")
-    
-    # القائمة الجانبية
+
+    # --- القائمة الجانبية ---
     with st.sidebar:
         st.success("النسخة مرخصة ✅")
         st.header("➕ إضافة حصة")
         teacher = st.text_input("الأستاذ *")
         subject = st.text_input("المادة *")
         classroom = st.text_input("القسم *")
-        days = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
         day = st.selectbox("اليوم", days)
-        
-        hours = [f"{h:02d}:00" for h in range(8, 18)]
         c1, c2 = st.columns(2)
-        start_t = c1.selectbox("من", hours)
-        end_t = c2.selectbox("إلى", hours)
-            
+        start_t = c1.selectbox("من", hours_list)
+        end_t = c2.selectbox("إلى", hours_list)
+
         if st.button("تثبيت الحصة"):
-            if teacher and subject and classroom and hours.index(start_t) < hours.index(end_t):
+            if teacher and subject and classroom and hours_list.index(start_t) < hours_list.index(end_t):
                 st.session_state.schedule.append({
                     "teacher": teacher, "subject": subject, "classroom": classroom,
                     "day": day, "start": start_t, "end": end_t
@@ -86,109 +93,33 @@ if check_license():
                 st.success("تم الحفظ!")
                 st.rerun()
             else:
-                st.error("بيانات ناقصة أو وقت خاطئ")
-
+                st.error("تأكد من البيانات والوقت.")
+        
+        st.divider()
         if st.button("تسجيل الخروج"):
             st.session_state.authenticated = False
             st.rerun()
 
-    # التبويبات
-    t1, t2, t3 = st.tabs(["📊 الأستاذ", "🏢 القسم", "📥 الإدارة"])
+    # --- التبويبات الرئيسية ---
+    t1, t2, t3, t4 = st.tabs(["📊 الأستاذ", "🏢 القسم", "🕵️ نظام الانتظار", "📥 الإدارة"])
 
-    def create_table(key, value, label_key):
-        df = pd.DataFrame(index=hours, columns=days).fillna("-")
+    def create_styled_table(key, value, label_key):
+        df = pd.DataFrame(index=hours_list, columns=days).fillna("-")
         for item in st.session_state.schedule:
             if item[key] == value:
-                s_idx, e_idx = hours.index(item['start']), hours.index(item['end'])
+                s_idx, e_idx = hours_list.index(item['start']), hours_list.index(item['end'])
                 for i in range(s_idx, e_idx):
-                    df.at[hours[i], item['day']] = f"{item['subject']} ({item[label_key]})"
-        return df
+                    df.at[hours_list[i], item['day']] = f"{item['subject']} ({item[label_key]})"
+        
+        # تطبيق التلوين
+        def apply_color(val):
+            if "(" in val:
+                sub = val.split(" (")[0]
+                return get_subject_style(sub)
+            return ""
+        return df.style.applymap(apply_color)
 
     with t1:
         teachers = sorted(list(set([i['teacher'] for i in st.session_state.schedule])))
         if teachers:
-            sel_t = st.selectbox("اختر الأستاذ:", teachers)
-            st.table(create_table('teacher', sel_t, 'classroom'))
-    
-    with t2:
-        classes = sorted(list(set([i['classroom'] for i in st.session_state.schedule])))
-        if classes:
-            sel_c = st.selectbox("اختر القسم:", classes)
-            st.table(create_table('classroom', sel_c, 'teacher'))
-
-    with t3:
-        if st.session_state.schedule:
-            for idx, item in enumerate(st.session_state.schedule):
-                col1, col2 = st.columns([5, 1])
-                col1.info(f"{item['subject']} | {item['teacher']} | {item['day']} ({item['start']}-{item['end']})")
-                if col2.button("حذف", key=f"d_{idx}"):
-                    st.session_state.schedule.pop(idx)
-                    st.rerun()
-            
-            # تصدير Excel
-            df_ex = pd.DataFrame(st.session_state.schedule)
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
-                df_ex.to_excel(writer, index=False)
-            st.download_button("📥 تحميل Excel", buf.getvalue(), "schedule.xlsx")
-            # --- دالة تلوين الخلايا (CSS) ---
-def get_subject_style(subject):
-    colors = {
-        "رياضيات": "#D6EAF8", # أزرق فاتح
-        "فيزياء": "#D5F5E3",   # أخضر فاتح
-        "علوم": "#FADBD8",     # وردي فاتح
-        "عربية": "#FCF3CF",    # أصفر فاتح
-        "فرنسية": "#E8DAEF",   # بنفسجي فاتح
-        "إنجليزية": "#FAE5D3"  # برتقالي فاتح
-    }
-    # إذا لم تكن المادة في القائمة، نستخدم لوناً رمادياً خفيفاً
-    return f'background-color: {colors.get(subject, "#F4F6F6")}'
-
-# --- تعديل دالة إنشاء الجدول لدعم الألوان ---
-def create_display_table(key, value, label_key):
-    df = pd.DataFrame(index=hours_list, columns=days).fillna("-")
-    for item in st.session_state.schedule:
-        if item[key] == value:
-            s_idx = hours_list.index(item['start'])
-            e_idx = hours_list.index(item['end'])
-            for i in range(s_idx, e_idx):
-                df.at[hours_list[i], item['day']] = f"{item['subject']} ({item[label_key]})"
-    
-    # تطبيق التلوين (Styler)
-    def apply_color(val):
-        if "(" in val:
-            subject_name = val.split(" (")[0]
-            return get_subject_style(subject_name)
-        return ""
-    
-    return df.style.applymap(apply_color)
-
-# --- إضافة تبويب "نظام الانتظار" ---
-t1, t2, t3, t4 = st.tabs(["📊 الأستاذ", "🏢 القسم", "🕵️ نظام الانتظار", "📥 الإدارة"])
-
-with t3:
-    st.subheader("🕵️ البحث عن أستاذ مستخلف (شاغر)")
-    col_day, col_hour = st.columns(2)
-    search_day = col_day.selectbox("اختر اليوم:", days, key="search_day")
-    search_hour = col_hour.selectbox("اختر الساعة:", hours_list, key="search_hour")
-    
-    if st.button("بحث عن الأساتذة الأحرار"):
-        all_teachers = set([i['teacher'] for i in st.session_state.schedule])
-        busy_teachers = set()
-        
-        for item in st.session_state.schedule:
-            if item['day'] == search_day:
-                s_idx = hours_list.index(item['start'])
-                e_idx = hours_list.index(item['end'])
-                curr_idx = hours_list.index(search_hour)
-                if s_idx <= curr_idx < e_idx:
-                    busy_teachers.add(item['teacher'])
-        
-        free_teachers = all_teachers - busy_teachers
-        
-        if free_teachers:
-            st.success(f"الأساتذة الأحرار يوم {search_day} على الساعة {search_hour}:")
-            for t in sorted(free_teachers):
-                st.write(f"✅ الأستاذ: **{t}**")
-        else:
-            st.warning("جميع الأساتذة لديهم حصص في هذا الوقت.")
+            sel_t = st.selectbox("اختر الأ
