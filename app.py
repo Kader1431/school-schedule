@@ -39,9 +39,9 @@ elif check_password():
     if 'schedule' not in st.session_state:
         st.session_state.schedule = []
 
-    # --- 3. إدخال البيانات مع التحقق من الحقول الإلزامية ---
+    # --- 3. إدخال البيانات ---
     with st.sidebar:
-        st.header("➕ إضافة حصة دقيقة")
+        st.header("➕ إضافة حصة جديدة")
         teacher = st.text_input("الأستاذ *")
         subject = st.text_input("المادة *")
         classroom = st.text_input("القسم *")
@@ -54,11 +54,10 @@ elif check_password():
         full_time = f"{start_t} - {end_t}"
 
         if st.button("تثبيت في الجدول"):
-            # حل مشكلة الخانات الإلزامية
             if not teacher or not subject or not classroom:
-                st.error("❌ عذراً! جميع الخانات التي تحمل علامة (*) إلزامية.")
+                st.error("❌ جميع الحقول (*) إلزامية")
             elif start_t == end_t:
-                st.error("❌ لا يمكن أن يكون وقت البداية هو نفسه وقت النهاية.")
+                st.error("❌ وقت البداية يجب أن يختلف عن النهاية")
             else:
                 conflict = False
                 for entry in st.session_state.schedule:
@@ -69,12 +68,15 @@ elif check_password():
                 
                 if not conflict:
                     st.session_state.schedule.append({
-                        "teacher": teacher, "subject": subject, 
-                        "classroom": classroom, "day": day, "time": full_time
+                        "teacher": teacher, 
+                        "subject": subject, 
+                        "classroom": classroom, 
+                        "day": day, 
+                        "time": full_time
                     })
                     st.success("✅ تمت الإضافة!")
 
-    # --- 4. العرض وتصدير البيانات ---
+    # --- 4. العرض (هنا تم إصلاح عرض المادة) ---
     t1, t2, t3 = st.tabs(["📊 الأستاذ", "🏢 القسم", "📥 إدارة الحصص"])
 
     with t1:
@@ -85,7 +87,8 @@ elif check_password():
             for item in st.session_state.schedule:
                 if item['teacher'] == sel_t:
                     st_key = item['time'].split(" - ")[0]
-                    df_t.at[st_key, item['day']] = f"{item['subject']} ({item['classroom']})"
+                    # هنا التعديل: إظهار المادة والقسم معاً
+                    df_t.at[st_key, item['day']] = f"📖 {item['subject']} \n ({item['classroom']})"
             st.table(df_t)
 
     with t2:
@@ -96,35 +99,32 @@ elif check_password():
             for item in st.session_state.schedule:
                 if item['classroom'] == sel_c:
                     st_key = item['time'].split(" - ")[0]
-                    df_c.at[st_key, item['day']] = f"{item['subject']} ({item['teacher']})"
+                    # هنا التعديل: إظهار المادة والأستاذ معاً
+                    df_c.at[st_key, item['day']] = f"📝 {item['subject']} \n ({item['teacher']})"
             st.table(df_c)
 
     with t3:
         if st.session_state.schedule:
-            st.write("### 📋 قائمة الحصص الحالية")
-            
-            # عرض الحصص مع خيار المسح الفردي
+            st.write("### 📋 إدارة الحصص المضافة")
             for idx, item in enumerate(st.session_state.schedule):
                 col_text, col_btn = st.columns([4, 1])
-                col_text.write(f"**{idx+1}.** {item['subject']} | {item['teacher']} | {item['classroom']} | {item['day']} ({item['time']})")
+                col_text.info(f"**{item['subject']}** | {item['teacher']} | {item['classroom']} | {item['day']} ({item['time']})")
                 if col_btn.button("حذف 🗑️", key=f"del_{idx}"):
                     st.session_state.schedule.pop(idx)
                     st.rerun()
 
             st.divider()
-            # تصدير Excel
             df_all = pd.DataFrame(st.session_state.schedule)
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                 df_all.to_excel(writer, index=False)
-            
             st.download_button("📥 تحميل ملف Excel", buffer.getvalue(), "schedule.xlsx")
             
-            if st.button("🗑️ مسح الجدول بالكامل"):
+            if st.button("🗑️ مسح الكل"):
                 st.session_state.schedule = []
                 st.rerun()
         else:
-            st.info("لا توجد حصص مضافة بعد.")
+            st.info("لا توجد بيانات حالياً.")
 
     st.sidebar.markdown("---")
     if st.sidebar.button("تسجيل الخروج"):
