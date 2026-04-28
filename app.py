@@ -1,64 +1,44 @@
-import streamlit as st
-import pandas as pd
-from streamlit_gsheets import GSheetsConnection
-import io
-
-# --- 1. إعداد الصفحة والاتصال ---
-APP_NAME = "SmarTimetable PRO ⚡"
-st.set_page_config(page_title=APP_NAME, layout="wide", page_icon="⚡")
-
-# الاتصال بجدول جوجل (يقرأ الرابط من Secrets)
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# --- 2. دالة التحقق (تفعيل لكل مرة) ---
 def check_license():
-    # استخدام session_state للتفعيل المؤقت في هذه الجلسة فقط
+    # 1. محاولة جلب البيانات مع معالجة الأخطاء
+    try:
+        # قراءة الجدول مع إلغاء التخزين المؤقت (ttl=0) لضمان رؤية الأكواد الجديدة فوراً
+        df = conn.read(ttl=0)
+        
+        # تنظيف البيانات: إزالة الفراغات الزائدة من الأكواد وحالات التفعيل
+        df['keys'] = df['keys'].astype(str).str.strip()
+        df['status'] = df['status'].astype(str).str.strip().str.lower()
+        
+        # تحويل الجدول إلى قاموس للبحث السريع
+        valid_keys_dict = dict(zip(df['keys'], df['status']))
+    except Exception as e:
+        st.error("⚠️ فشل الاتصال بجدول الأكواد. تأكد من رابط Secrets وصلاحيات المشاركة في جوجل.")
+        # خيار للطوارئ: عرض الخطأ للمطور (اختياري)
+        # st.exception(e) 
+        return False
+
+    # 2. إدارة حالة الجلسة
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
 
+    # 3. واجهة إدخال الكود
     if not st.session_state.authenticated:
-        st.title("🔐 تفعيل نظام Lister K")
-        st.info("يرجى إدخال كود التفعيل (صالح لهذه الجلسة فقط).")
+        st.title("🔐 تفعيل نظام SmarTimetable PRO")
+        st.markdown(f"**المطور:** Lister K | **الحالة:** نسخة محمية")
         
-        user_key = st.text_input("كود التفعيل", type="password", placeholder="XXXX-XXXX-XXXXXX")
+        # حقل الإدخال
+        user_key = st.text_input("أدخل كود التفعيل المكون من 14 حرفاً", placeholder="XXXX-XXXX-XXXXXX").strip()
         
-        if st.button("دخول"):
-            try:
-                # جلب البيانات من الجدول فوراً
-                df = conn.read(ttl=0) 
-                valid_keys = dict(zip(df['keys'], df['status']))
-                
-                if user_key in valid_keys:
-                    if valid_keys[user_key] == "active":
-                        st.session_state.authenticated = True
-                        st.success("✅ تم التفعيل بنجاح!")
-                        st.rerun()
-                    else:
-                        st.error("❌ هذا الكود معطل أو مستخدم.")
+        if st.button("تفعيل البرنامج"):
+            if user_key in valid_keys_dict:
+                if valid_keys_dict[user_key] == "active":
+                    st.session_state.authenticated = True
+                    st.success("✅ تم التفعيل بنجاح! سيتم فتح الجدول الآن...")
+                    st.rerun()
                 else:
-                    st.error("❌ كود غير صحيح.")
-            except:
-                st.error("⚠️ خطأ في الاتصال بقاعدة البيانات. تأكد من إعدادات Secrets ورابط الجدول.")
+                    st.error("❌ عذراً، هذا الكود معطل (status ليس active).")
+            else:
+                st.error("❌ الكود غير موجود في قاعدة البيانات. تأكد من كتابته بدقة.")
         
-        st.caption("برمجة وتطوير Lister K © 2026")
         return False
-    return True
-
-# --- 3. تشغيل البرنامج الرئيسي في حال التفعيل ---
-if check_license():
-    # القائمة الجانبية وزر الخروج اليدوي
-    with st.sidebar:
-        st.success("النسخة مرخصة ✅")
-        if st.button("إنهاء الجلسة (قفل)"):
-            st.session_state.authenticated = False
-            st.rerun()
-        st.divider()
-
-    # --- هنا تضع كود الجداول المطور الخاص بك ---
-    st.title(f"⚡ {APP_NAME}")
     
-    if 'schedule' not in st.session_state:
-        st.session_state.schedule = []
-
-    # (بقية كود إضافة الحصص والجداول كما هي في النسخ السابقة)
-    # ...
+    return True
