@@ -1,146 +1,127 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, time
 import io
 
-# --- 1. إعدادات الحماية والنسخة التجريبية (يمكنك تعديلها) ---
-USER_NAME = "listerk"       # اسم المستخدم للدخول
-PASSWORD = "123"            # كلمة السر للدخول
-EXPIRY_DATE = date(2026, 6, 1)  # تاريخ انتهاء النسخة التجريبية (سنة، شهر، يوم)
+# --- 1. إعدادات الحماية والاسم الجديد ---
+USER_NAME = "listerk"
+PASSWORD = "123"
+EXPIRY_DATE = date(2026, 6, 1)
+APP_NAME = "SmarTimetable ⚡" # الاسم الجديد للبرنامج
 
-# إعدادات الصفحة الاحترافية
-st.set_page_config(page_title="SmarTimetable ⚡ | Lister K", layout="wide")
+st.set_page_config(page_title=APP_NAME, layout="wide", page_icon="⚡")
 
-# --- 2. دالة فحص تاريخ الصلاحية ---
+# --- 2. نظام الحماية ---
 def is_expired():
-    if date.today() > EXPIRY_DATE:
-        return True
-    return False
+    return date.today() > EXPIRY_DATE
 
-# --- 3. دالة التحقق من تسجيل الدخول ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
-
     if not st.session_state.authenticated:
-        st.title("🔐 تسجيل الدخول للنظام")
-        st.info(f"هذه النسخة تابعة لـ Lister K ومحمية بحقوق الملكية.")
-        
-        user_input = st.text_input("اسم المستخدم")
-        pw_input = st.text_input("كلمة السر", type="password")
-        
+        st.title(f"🔐 دخول {APP_NAME}")
+        u = st.text_input("اسم المستخدم")
+        p = st.text_input("كلمة السر", type="password")
         if st.button("دخول"):
-            if user_input == USER_NAME and pw_input == PASSWORD:
+            if u == USER_NAME and p == PASSWORD:
                 st.session_state.authenticated = True
                 st.rerun()
             else:
-                st.error("❌ اسم المستخدم أو كلمة السر غير صحيحة!")
+                st.error("بيانات خاطئة")
         return False
     return True
 
-# --- 4. تشغيل منطق الحماية والبرنامج ---
 if is_expired():
-    st.error(f"❌ انتهت صلاحية هذه النسخة بتاريخ {EXPIRY_DATE}")
-    st.warning("يرجى التواصل مع المطور Lister K لتجديد الاشتراك.")
-    st.markdown("📩 **للتواصل:** [ضع وسيلة اتصالك هنا]")
-
+    st.error("انتهت الصلاحية، تواصل مع Lister K")
 elif check_password():
-    # --- بداية البرنامج الأصلي بعد تخطي الحماية ---
-    
-    st.sidebar.success(f"مرحباً بك: {USER_NAME}")
-    if st.sidebar.button("تسجيل الخروج"):
-        st.session_state.authenticated = False
-        st.rerun()
+    st.title(f"⚡ {APP_NAME}")
+    st.subheader("نظام تنظيم الجداول المدرسية بدقة الساعة")
 
-    st.title("SmarTimetable ⚡ | منظم المواعيد المدرسي الذكي")
-    st.write("إدارة الحصص، منع التضارب، وتصدير الجداول - النسخة الاحترافية")
-
-    # إعدادات الوقت والأيام
+    # --- 3. إعدادات الوقت (بالساعة والدقيقة) ---
     days = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
-    times = ["08:00 - 10:00", "10:00 - 12:00", "13:00 - 15:00", "15:00 - 17:00"]
+    
+    # تعريف الساعات المتاحة في النظام (من 8 صباحاً إلى 5 مساءً)
+    working_hours = [f"{h:02d}:00" for h in range(8, 18)]
 
     if 'schedule' not in st.session_state:
         st.session_state.schedule = []
 
-    # القائمة الجانبية لإضافة الحصص
+    # --- 4. إدخال البيانات بالساعة ---
     with st.sidebar:
-        st.header("➕ إضافة حصة جديدة")
-        teacher = st.text_input("اسم الأستاذ")
+        st.header("➕ إضافة حصة دقيقة")
+        teacher = st.text_input("الأستاذ")
         subject = st.text_input("المادة")
-        classroom = st.text_input("القسم / القاعة")
-        day = st.selectbox("اختر اليوم", days)
-        time = st.selectbox("اختر التوقيت", times)
+        classroom = st.text_input("القسم")
+        day = st.selectbox("اليوم", days)
         
-        if st.button("إضافة إلى الجدول"):
-            # خوارزمية فحص التضارب
+        col1, col2 = st.columns(2)
+        with col1:
+            start_t = st.selectbox("من الساعة", working_hours)
+        with col2:
+            end_t = st.selectbox("إلى الساعة", working_hours)
+            
+        full_time = f"{start_t} - {end_t}"
+
+        if st.button("تثبيت في الجدول"):
+            # منع التضارب
             conflict = False
             for entry in st.session_state.schedule:
-                if entry['day'] == day and entry['time'] == time:
-                    if entry['teacher'] == teacher:
-                        st.error(f"⚠️ تضارب: {teacher} لديه حصة أخرى في هذا الوقت!")
-                        conflict = True
-                    if entry['classroom'] == classroom:
-                        st.error(f"⚠️ تضارب: القسم {classroom} مشغول في هذا الوقت!")
+                if entry['day'] == day and entry['time'] == full_time:
+                    if entry['teacher'] == teacher or entry['classroom'] == classroom:
+                        st.error("⚠️ تضارب في التوقيت!")
                         conflict = True
             
-            if not conflict:
-                if teacher and subject and classroom:
-                    st.session_state.schedule.append({
-                        "teacher": teacher, "subject": subject, 
-                        "classroom": classroom, "day": day, "time": time
-                    })
-                    st.success("تمت إضافة الحصة بنجاح!")
-                else:
-                    st.warning("يرجى إكمال جميع الحقول")
+            if not conflict and teacher and subject:
+                st.session_state.schedule.append({
+                    "teacher": teacher, "subject": subject, 
+                    "classroom": classroom, "day": day, "time": full_time
+                })
+                st.success("تم الإضافة!")
 
-    # عرض الجداول وتصديرها
-    st.divider()
-    tab1, tab2, tab3 = st.tabs(["📊 جدول الأستاذ", "🏢 جدول القسم", "📥 تصدير البيانات"])
+    # --- 5. عرض الجداول ---
+    tab1, tab2, tab3 = st.tabs(["📊 الأستاذ", "🏢 القسم", "📥 تصدير"])
 
     with tab1:
-        teacher_list = sorted(list(set([item['teacher'] for item in st.session_state.schedule])))
-        if teacher_list:
-            selected_t = st.selectbox("اختر الأستاذ لعرض جدوله:", teacher_list)
-            df_t = pd.DataFrame(index=times, columns=days).fillna("-")
+        t_list = sorted(list(set([i['teacher'] for i in st.session_state.schedule])))
+        if t_list:
+            sel_t = st.selectbox("اختر الأستاذ:", t_list)
+            # عرض الجدول بالساعات
+            df_t = pd.DataFrame(index=working_hours, columns=days).fillna("-")
             for item in st.session_state.schedule:
-                if item['teacher'] == selected_t:
-                    df_t.at[item['time'], item['day']] = f"{item['subject']} ({item['classroom']})"
+                if item['teacher'] == sel_t:
+                    # تلوين الخانات بين وقت البداية والنهاية (تبسيطاً سنضعها في وقت البداية)
+                    start_key = item['time'].split(" - ")[0]
+                    df_t.at[start_key, item['day']] = f"✅ {item['subject']} ({item['classroom']})"
             st.table(df_t)
-        else:
-            st.info("لا توجد بيانات حالياً.")
 
     with tab2:
-        class_list = sorted(list(set([item['classroom'] for item in st.session_state.schedule])))
-        if class_list:
-            selected_c = st.selectbox("اختر القسم لعرض جدوله:", class_list)
-            df_c = pd.DataFrame(index=times, columns=days).fillna("-")
+        c_list = sorted(list(set([i['classroom'] for i in st.session_state.schedule])))
+        if c_list:
+            sel_c = st.selectbox("اختر القسم:", c_list)
+            df_c = pd.DataFrame(index=working_hours, columns=days).fillna("-")
             for item in st.session_state.schedule:
-                if item['classroom'] == selected_c:
-                    df_c.at[item['time'], item['day']] = f"{item['subject']} ({item['teacher']})"
+                if item['classroom'] == sel_c:
+                    start_key = item['time'].split(" - ")[0]
+                    df_c.at[start_key, item['day']] = f"📖 {item['subject']} ({item['teacher']})"
             st.table(df_c)
 
     with tab3:
         if st.session_state.schedule:
-            all_data = pd.DataFrame(st.session_state.schedule)
-            st.write("قائمة جميع الحصص المضافة:")
-            st.dataframe(all_data)
+            df_all = pd.DataFrame(st.session_state.schedule)
+            st.dataframe(df_all)
             
-            # ميزة التصدير إلى Excel
+            # تصدير Excel
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                all_data.to_excel(writer, index=False, sheet_name='الجدول العام')
+                df_all.to_excel(writer, index=False)
             
-            st.download_button(
-                label="📥 تحميل الجدول بصيغة Excel",
-                data=buffer.getvalue(),
-                file_name=f"جدول_مدرسي_{date.today()}.xlsx",
-                mime="application/vnd.ms-excel"
-            )
+            st.download_button("📥 تحميل ملف Excel", buffer.getvalue(), "schedule.xlsx")
             
-            if st.button("🗑️ مسح كل البيانات"):
+            if st.button("🗑️ مسح الكل"):
                 st.session_state.schedule = []
                 st.rerun()
 
-    # تذييل الصفحة
-    st.markdown("---")
-    st.caption(f"تم التطوير بواسطة Lister K | نسخة تجريبية تنتهي في {EXPIRY_DATE}")
+    st.sidebar.markdown("---")
+    if st.sidebar.button("تسجيل الخروج"):
+        st.session_state.authenticated = False
+        st.rerun()
