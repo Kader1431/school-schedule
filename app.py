@@ -7,91 +7,127 @@ import io
 APP_NAME = "SmarTimetable PRO ⚡"
 st.set_page_config(page_title=APP_NAME, layout="wide", page_icon="⚡")
 
-# --- 2. الاتصال بقاعدة البيانات ---
+# --- 2. الاتصال بقاعدة بيانات جوجل ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def check_license():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
+
     if not st.session_state.authenticated:
-        st.title("🔐 نظام تفعيل Lister K")
-        key_input = st.text_input("أدخل كود التفعيل", type="password").strip()
+        st.title(f"🔐 تفعيل نظام {APP_NAME}")
+        st.info("يرجى إدخال كود التفعيل المكون من 14 حرفاً.")
+        
+        user_key = st.text_input("كود التفعيل", type="password", placeholder="XXXX-XXXX-XXXXXX").strip()
+        
         if st.button("دخول"):
             try:
-                df_k = conn.read(ttl=0)
-                df_k.columns = [str(c).strip().lower() for c in df_k.columns]
-                keys_dict = dict(zip(df_k['keys'].astype(str), df_k['status'].astype(str).str.lower()))
-                if key_input in keys_dict and keys_dict[key_input] == "active":
-                    st.session_state.authenticated = True
-                    st.rerun()
+                # قراءة الجدول مع إلغاء التخزين المؤقت
+                df_keys = conn.read(ttl=0)
+                
+                # تنظيف أسماء الأعمدة (إزالة أي مسافات زائدة وتحويلها لحروف صغيرة)
+                df_keys.columns = [str(c).strip().lower() for c in df_keys.columns]
+                
+                # التأكد من وجود الأعمدة المطلوبة
+                if 'keys' in df_keys.columns and 'status' in df_keys.columns:
+                    # تنظيف البيانات داخل الأعمدة
+                    df_keys['keys'] = df_keys['keys'].astype(str).str.strip()
+                    df_keys['status'] = df_keys['status'].astype(str).str.strip().str.lower()
+                    
+                    # تحويل لقاموس للبحث
+                    valid_keys = dict(zip(df_keys['keys'], df_keys['status']))
+                    
+                    if user_key in valid_keys:
+                        if valid_keys[user_key] == "active":
+                            st.session_state.authenticated = True
+                            st.success("✅ تم التفعيل بنجاح!")
+                            st.rerun()
+                        else:
+                            st.error("❌ هذا الكود منتهي الصلاحية أو معطل.")
+                    else:
+                        st.error("❌ كود التفعيل غير صحيح.")
                 else:
-                    st.error("كود خاطئ أو غير مفعل")
-            except:
-                st.error("خطأ في الاتصال بالقاعدة")
+                    st.error("⚠️ خطأ في تنسيق الجدول: تأكد أن العناوين هي keys و status.")
+            except Exception as e:
+                st.error("⚠️ فشل الاتصال بالجدول. تأكد من إعدادات Secrets وصلاحية المشاركة (Anyone with link).")
+        
+        st.caption("برمجة وتطوير Lister K © 2026")
         return False
     return True
 
-# --- 3. تشغيل البرنامج الرئيسي ---
+# --- 3. البرنامج الرئيسي ---
 if check_license():
-    days = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
-    hours = [f"{h:02d}:00" for h in range(8, 18)]
     if 'schedule' not in st.session_state:
         st.session_state.schedule = []
 
-    def get_style(sub):
-        clrs = {"رياضيات": "#D6EAF8", "فيزياء": "#D5F5E3", "علوم": "#FADBD8", "عربية": "#FCF3CF"}
-        return f'background-color: {clrs.get(sub, "#F4F6F6")}; color: black;'
-
     st.title(f"⚡ {APP_NAME}")
     
+    # القائمة الجانبية
     with st.sidebar:
         st.success("النسخة مرخصة ✅")
-        t_in = st.text_input("الأستاذ")
-        s_in = st.text_input("المادة")
-        c_in = st.text_input("القسم")
-        d_in = st.selectbox("اليوم", days)
-        start_in = st.selectbox("من", hours)
-        end_in = st.selectbox("إلى", hours)
-        if st.button("حفظ الحصة"):
-            if t_in and s_in and hours.index(start_in) < hours.index(end_in):
-                st.session_state.schedule.append({"teacher":t_in,"subject":s_in,"classroom":c_in,"day":d_in,"start":start_in,"end":end_in})
+        st.header("➕ إضافة حصة")
+        teacher = st.text_input("الأستاذ *")
+        subject = st.text_input("المادة *")
+        classroom = st.text_input("القسم *")
+        days = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
+        day = st.selectbox("اليوم", days)
+        
+        hours = [f"{h:02d}:00" for h in range(8, 18)]
+        c1, c2 = st.columns(2)
+        start_t = c1.selectbox("من", hours)
+        end_t = c2.selectbox("إلى", hours)
+            
+        if st.button("تثبيت الحصة"):
+            if teacher and subject and classroom and hours.index(start_t) < hours.index(end_t):
+                st.session_state.schedule.append({
+                    "teacher": teacher, "subject": subject, "classroom": classroom,
+                    "day": day, "start": start_t, "end": end_t
+                })
+                st.success("تم الحفظ!")
                 st.rerun()
+            else:
+                st.error("بيانات ناقصة أو وقت خاطئ")
 
-    t1, t2, t3, t4 = st.tabs(["📊 الأستاذ", "🏢 القسم", "🕵️ الانتظار", "📥 الإدارة"])
+        if st.button("تسجيل الخروج"):
+            st.session_state.authenticated = False
+            st.rerun()
 
-    def draw_table(k, val, lbl):
+    # التبويبات
+    t1, t2, t3 = st.tabs(["📊 الأستاذ", "🏢 القسم", "📥 الإدارة"])
+
+    def create_table(key, value, label_key):
         df = pd.DataFrame(index=hours, columns=days).fillna("-")
-        for i in st.session_state.schedule:
-            if i[k] == val:
-                for h in range(hours.index(i['start']), hours.index(i['end'])):
-                    df.at[hours[h], i['day']] = f"{i['subject']} ({i[lbl]})"
-        return df.style.applymap(lambda v: get_style(v.split(" (")[0]) if "(" in str(v) else "")
+        for item in st.session_state.schedule:
+            if item[key] == value:
+                s_idx, e_idx = hours.index(item['start']), hours.index(item['end'])
+                for i in range(s_idx, e_idx):
+                    df.at[hours[i], item['day']] = f"{item['subject']} ({item[label_key]})"
+        return df
 
     with t1:
-        ts = sorted(list(set([x['teacher'] for x in st.session_state.schedule])))
-        if ts:
-            st.table(draw_table('teacher', st.selectbox("الأستاذ:", ts), 'classroom'))
-
+        teachers = sorted(list(set([i['teacher'] for i in st.session_state.schedule])))
+        if teachers:
+            sel_t = st.selectbox("اختر الأستاذ:", teachers)
+            st.table(create_table('teacher', sel_t, 'classroom'))
+    
     with t2:
-        cs = sorted(list(set([x['classroom'] for x in st.session_state.schedule])))
-        if cs:
-            st.table(draw_table('classroom', st.selectbox("القسم:", cs), 'teacher'))
+        classes = sorted(list(set([i['classroom'] for i in st.session_state.schedule])))
+        if classes:
+            sel_c = st.selectbox("اختر القسم:", classes)
+            st.table(create_table('classroom', sel_c, 'teacher'))
 
     with t3:
-        st.subheader("🕵️ البحث عن أستاذ شاغر")
-        col1, col2 = st.columns(2)
-        sd = col1.selectbox("يوم البحث", days)
-        sh = col2.selectbox("ساعة البحث", hours)
-        if st.button("بحث"):
-            all_t = set([x['teacher'] for x in st.session_state.schedule])
-            busy = set([x['teacher'] for x in st.session_state.schedule if x['day']==sd and hours.index(x['start']) <= hours.index(sh) < hours.index(x['end'])])
-            free = sorted(list(all_t - busy))
-            st.success(f"الأساتذة الأحرار: {', '.join(free)}" if free else "لا يوجد أحرار")
-
-    with t4:
-        for idx, item in enumerate(st.session_state.schedule):
-            c_a, c_b = st.columns([5, 1])
-            c_a.write(f"{item['subject']} | {item['teacher']} | {item['day']} ({item['start']}-{item['end']})")
-            if c_b.button("حذف", key=f"del_{idx}"):
-                st.session_state.schedule.pop(idx)
-                st.rerun()
+        if st.session_state.schedule:
+            for idx, item in enumerate(st.session_state.schedule):
+                col1, col2 = st.columns([5, 1])
+                col1.info(f"{item['subject']} | {item['teacher']} | {item['day']} ({item['start']}-{item['end']})")
+                if col2.button("حذف", key=f"d_{idx}"):
+                    st.session_state.schedule.pop(idx)
+                    st.rerun()
+            
+            # تصدير Excel
+            df_ex = pd.DataFrame(st.session_state.schedule)
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+                df_ex.to_excel(writer, index=False)
+            st.download_button("📥 تحميل Excel", buf.getvalue(), "schedule.xlsx")
